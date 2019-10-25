@@ -1,8 +1,10 @@
 ---
 title: "Web Scraping"
-author: "Matthew Ross"
+author: "Danielle Reimanis"
 date: "10/20/2019"
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
@@ -70,6 +72,11 @@ file_names <- paste0('data/',dataset)
 #   download.file(links[i],destfile=file_names[i])
 # }
 
+
+downloaded <- file.exists(file_names)
+
+evaluate <- !all(downloaded)
+
 ```
 
 ### Download data in a map
@@ -77,7 +84,9 @@ file_names <- paste0('data/',dataset)
 ```{r}
 
 #Map version of the same forloop (downloading 4 files)
+if(evaluate == T){
 map2(links,file_names,download.file)
+}else{print('data already downloaded')}
 
 ```
 
@@ -149,6 +158,11 @@ the `SASP forcing` and `SBSP_forcing` meteoroligical datasets.
 
 ```{r}
 
+links_2 <- webpage %>%
+  html_nodes('a') %>%
+  .[grepl('forcing',.)] %>%
+  html_attr('href')
+
 ```
 
 ## Download the meteorological data
@@ -159,6 +173,17 @@ You can use a for loop or a map function.
 
 ```{r}
 
+#Grab only the name of the file by splitting out on forward slashes
+splits_2 <- str_split_fixed(links_2,'/',5)
+
+#Keep only the 5th column
+dataset_2 <- splits_2[,5] 
+
+#generate a file list for where the data goes
+file_names_2 <- paste0('data/',dataset_2)
+
+map2(links_2,file_names_2,download.file)
+
 ```
 
 ## Read in the data
@@ -168,12 +193,35 @@ column to the data.
 
 ```{r}
 
+library(pdftools)
+headers <- pdf_text('https://snowstudies.org/data/Serially-Complete-Metadata-text08.pdf') %>%
+  readr::read_lines(.) %>%
+  trimws(.) %>%
+  str_split_fixed(.,'\\.',2) %>%
+  .[,2] %>%
+  .[1:26]
+
+headers1 <- c(headers, "site")
+
+forcing_reader <- function(file){
+  name = str_split_fixed(file,'-',4)[,3]%>%
+       gsub('Complete','',.)
+  df <- read.delim(file, header = FALSE, sep = " ") %>%
+    mutate(site = name)%>%
+    select(1:26, 97)
+return(df)
+}
+
 ```
 
 
 Use the `map` function to read in both meteorological files.
 
 ```{r}
+
+forcing_data <- map_dfr(file_names_2, forcing_reader)
+
+forcing_colnames <- setNames(forcing_data, headers1)
 
 ```
 
